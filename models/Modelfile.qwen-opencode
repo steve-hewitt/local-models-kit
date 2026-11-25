@@ -1,0 +1,18 @@
+# Context-pinned Qwen3-30B-A3B variant for OpenCode.
+# Build it with:
+#   ollama create qwen-opencode -f models/Modelfile.qwen-opencode
+# (The setup scripts build this automatically when WITH_QWEN=1, and
+# rewrite the FROM line below to the tag they pulled, so a non-default
+# Qwen tag pins itself rather than the default tag named below.)
+# Same reasoning as the Flint Modelfile: bake the context in so the
+# runtime default cannot silently shrink it. 131072 is both the kit
+# default and this model's documented ceiling: Qwen3-30B-A3B is a
+# 32,768-native model that reaches 131,072 with YaRN (Qwen model card
+# and technical report). Do not raise Qwen past it; the setup scripts
+# keep Qwen on QWEN_NUM_CTX (default 131072) even when NUM_CTX raises
+# the Flint pin higher.
+
+FROM qwen3:30b-a3b
+
+PARAMETER num_ctx 131072
+PARAMETER num_predict 8192

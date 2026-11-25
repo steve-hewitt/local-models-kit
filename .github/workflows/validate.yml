@@ -1,0 +1,202 @@
+name: validate-kit
+
+# This CI validates the kit itself: file syntax, config shape, and that the
+# hello-agent example is actually solvable. It does NOT run Ollama, Flint,
+# Headroom, or OpenCode; a 23 GB model has no business in CI. The real
+# end-to-end run happens on target hardware via docs/reference/VALIDATION.md.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  posix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: JSON config parses
+        run: python3 -m json.tool config/opencode.json > /dev/null
+
+      - name: Config points at the local stack
+        run: |
+          grep -q "http://localhost:11434/v1" config/opencode.json
+          grep -q '"flint-opencode:latest"' config/opencode.json
+          grep -Eq '"tool_call": *true' config/opencode.json
+          grep -q '"headroom"' config/opencode.json
+          grep -q "http://127.0.0.1:8787/v1" config/opencode.json
+          grep -q "qwen-opencode:latest" config/opencode.json
+
+      - name: Config declares only context-pinned models (regression guard for the 2026-10-24 first-run failure)
+        run: |
+          python3 - << 'EOF'
+          import json, pathlib
+          cfg = json.loads(pathlib.Path("config/opencode.json").read_text())
+          default = cfg["model"]
+          assert "-opencode" in default, f"default model {default} is not a context-pinned *-opencode variant; the unpinned base tag runs at Ollama's 4096 default and truncates prompts"
+          for pname, provider in cfg["provider"].items():
+              for key in provider["models"]:
+                  assert "-opencode" in key, f"{pname}/{key} is declared but not context-pinned; do not advertise agent models whose num_ctx is not pinned by a Modelfile"
+          print("All declared models are context-pinned variants, default included.")
+          EOF
+
+      - name: Picker whitelist hides server-discovered base tags
+        run: |
+          python3 - << 'EOF'
+          import json, pathlib
+          cfg = json.loads(pathlib.Path("config/opencode.json").read_text())
+          for pname, provider in cfg["provider"].items():
+              declared = set(provider["models"])
+              whitelist = set(provider.get("whitelist", []))
+              assert whitelist == declared, (
+                  f"{pname} whitelist {sorted(whitelist)} must exactly match its declared models "
+                  f"{sorted(declared)}; OpenCode can surface extra models served by the endpoint, "
+                  "including unpinned base tags, unless the picker is whitelisted")
+          print("Every provider whitelist exactly matches its declared pinned models.")
+          EOF
+
+      - name: Provider model parity (ollama vs headroom)
+        run: |
+          python3 - << 'EOF'
+          import json, pathlib
+          cfg = json.loads(pathlib.Path("config/opencode.json").read_text())
+          providers = cfg["provider"]
+          if "headroom" in providers:
+              ollama_models = providers["ollama"]["models"]
+              headroom_models = providers["headroom"]["models"]
+              assert set(ollama_models) == set(headroom_models), (
+                  f"model keys differ between providers: {set(ollama_models) ^ set(headroom_models)}")
+              for key in ollama_models:
+                  assert ollama_models[key]["limit"] == headroom_models[key]["limit"], f"limits differ for {key}"
+                  assert ollama_models[key]["tool_call"] == headroom_models[key]["tool_call"], f"tool_call differs for {key}"
+              print(f"Provider parity holds for {len(ollama_models)} models.")
+          else:
+              print("No headroom provider in config; parity check skipped.")
+          EOF
+
+      - name: Modelfile parameters match config limits
+        run: |
+          python3 - << 'EOF'
+          import json, pathlib, re
+          cfg = json.loads(pathlib.Path("config/opencode.json").read_text())
+          # Provider parity (checked in the step above) means any one
+          # provider's limits speak for all of them.
+          models = next(iter(cfg["provider"].values()))["models"]
+          contexts = {m["limit"]["context"] for m in models.values()}
+          assert len(contexts) == 1, f"config context limits disagree: {contexts}"
+          want_ctx = contexts.pop()
+          # Output budgets are per model since the 2026-11-14 Flint cap
+          # raise: each Modelfile is checked against its own model's
+          # config limit, not against one global value.
+          families = {
+              "Modelfile.flint-opencode": "flint-opencode:latest",
+              "Modelfile.qwen-opencode": "qwen-opencode:latest",
+          }
+          for name, key in families.items():
+              mf = pathlib.Path("models") / name
+              text = mf.read_text()
+              ctx = re.search(r"PARAMETER num_ctx (\d+)", text)
+              out = re.search(r"PARAMETER num_predict (\d+)", text)
+              assert ctx, f"{mf} has no num_ctx parameter"
+              assert out, f"{mf} has no num_predict parameter"
+              assert int(ctx.group(1)) == want_ctx, f"{mf} num_ctx {ctx.group(1)} != config context {want_ctx}"
+              want_out = models[key]["limit"]["output"]
+              assert int(out.group(1)) == want_out, f"{mf} num_predict {out.group(1)} != config output {want_out} for {key}"
+          print("Modelfile parameters match config limits (context shared, output per model).")
+          EOF
+
+      - name: Shell scripts parse
+        run: |
+          for f in scripts/*.sh; do bash -n "$f"; done
+
+      - name: Compare harness plan prints (no models touched)
+        run: ./scripts/compare.sh --plan
+
+      - name: Compare harness end-to-end against mocks
+        run: ./tests/compare-mock.sh
+
+      - name: No em dashes in docs or scripts
+        run: |
+          if grep -rn "—" README.md MANUAL-SETUP.md CHANGELOG.md docs config models scripts examples installer; then
+            echo "Em dash found. House style: rewrite with a hyphen or a period."
+            exit 1
+          fi
+
+      - name: Hello-agent example fails as designed, and the one-line fix solves it
+        run: |
+          cd examples/hello-agent
+          if python3 test_calc.py; then
+            echo "Example test passed before the fix. The deliberate bug is gone; restore it."
+            exit 1
+          fi
+          python3 - << 'EOF'
+          import pathlib
+          p = pathlib.Path("calc.py")
+          src = p.read_text()
+          buggy = "def mul(a, b):\n    # BUG: this adds instead of multiplying.\n    return a + b"
+          assert buggy in src, "deliberate mul bug block not found verbatim"
+          p.write_text(src.replace(buggy, "def mul(a, b):\n    return a * b"))
+          EOF
+          # Only mul changed: add must keep its + operator.
+          grep -A1 "def add" calc.py | grep -q "return a + b"
+          python3 test_calc.py
+
+  installer-tests:
+    name: Installer manager tests (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Manager behavior suite (fake platform, no models touched)
+        run: python -m unittest discover -s installer/tests
+
+  build-exe:
+    name: Build local-models-kit.exe (Windows)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install PyInstaller
+        run: pip install pyinstaller
+
+      - name: Build the one-file manager EXE
+        run: pyinstaller --onefile --name local-models-kit --distpath dist installer/manager/local_models_kit_manager.py
+
+      - name: Upload the EXE artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: local-models-kit-exe
+          path: dist/local-models-kit.exe
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: PowerShell scripts parse
+        shell: pwsh
+        run: |
+          $failed = $false
+          Get-ChildItem scripts/*.ps1 | ForEach-Object {
+            $tokens = $null; $errors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile($_.FullName, [ref]$tokens, [ref]$errors) | Out-Null
+            if ($errors.Count -gt 0) { $failed = $true; $errors | ForEach-Object { Write-Host "$($_.Extent.File): $($_.Message)" } }
+          }
+          if ($failed) { exit 1 }
+          Write-Host "All PowerShell scripts parse."
+
+      - name: Compare harness plan prints (no models touched)
+        shell: pwsh
+        run: ./scripts/compare.ps1 -Plan

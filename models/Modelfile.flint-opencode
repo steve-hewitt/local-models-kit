@@ -1,0 +1,29 @@
+# Context-pinned Flint variant for OpenCode.
+# Build it with:
+#   ollama create flint-opencode -f models/Modelfile.flint-opencode
+# Verify with:
+#   ollama show flint-opencode --parameters
+# The setup scripts rewrite this file's FROM line to the tag they
+# pulled (MODEL_TAG) before building, so a non-default Flint tag pins
+# itself rather than the default build named below.
+#
+# Why bake this in instead of relying on client settings?
+# Ollama's runtime context defaults are much smaller than Flint's 262K
+# maximum, and client-side settings do not reliably override them.
+# A Modelfile is the one place the value always wins.
+#
+# 131072 (128K) is the kit default since 2026-11-09: 32K proved
+# unusable for real agent work and 128K is the floor. Flint's own ceiling is 262K; the setup scripts honor NUM_CTX
+# to rebuild this variant higher (they rewrite this line in the temp
+# copy they build from). The KV cache grows linearly with context;
+# see docs/HARDWARE.md before raising it on a 64 GB machine.
+#
+# num_predict is 32768 for Flint: Recursive's model card recommends an
+# output budget of at least 32768 tokens for hard problems, reasoning
+# included. At the old 8192 a hard turn could spend the whole budget
+# thinking and get cut off before answering. Qwen's variant stays 8192.
+
+FROM flint
+
+PARAMETER num_ctx 131072
+PARAMETER num_predict 32768

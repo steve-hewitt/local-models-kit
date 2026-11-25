@@ -1,0 +1,10 @@
+# The kit is byte-exact: embedded templates are compared against the
+# repo files and installed files are hash-checked. Line-ending
+# conversion on Windows checkouts (core.autocrlf) would silently
+# rewrite those files, so text checks out with LF everywhere except
+# Windows batch files, which cmd.exe reads most reliably as CRLF.
+* text=auto eol=lf
+*.bat text eol=crlf
+*.safetensors binary
+*.7z binary
+*.exe binary

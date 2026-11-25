@@ -1,0 +1,23 @@
+.env
+*.log
+__pycache__/
+.pytest_cache/
+.venv/
+# Windows download artifacts (alternate data streams) must never be committed
+*:Zone.Identifier
+# Installer and build outputs
+dist/
+build/
+*.spec
+# Local manager state
+.local_models_kit/
+# Test and tooling caches
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+# Local OpenCode state and backups created by setup
+opencode.json.bak-*
+# Compare run artifacts are machine-specific and dated; keep the README only
+results/*
+!results/README.md
