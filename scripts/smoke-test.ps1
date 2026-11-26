@@ -50,7 +50,14 @@ try {
     $cfg = Get-Content (Join-Path $KitRoot "config\opencode.json") -Raw | ConvertFrom-Json
     $flintCtx = [int](Select-String -Path (Join-Path $KitRoot "models\Modelfile.flint-opencode") -Pattern "PARAMETER num_ctx (\d+)").Matches[0].Groups[1].Value
     $qwenCtx = [int](Select-String -Path (Join-Path $KitRoot "models\Modelfile.qwen-opencode") -Pattern "PARAMETER num_ctx (\d+)").Matches[0].Groups[1].Value
-    $ok = $cfg.model -match "-opencode"
+    $ok = $true
+    $defaultProp = $cfg.PSObject.Properties["model"]
+    if ($defaultProp -and $defaultProp.Value) {
+        $default = [string]$defaultProp.Value
+        if (($default -like "ollama/*" -or $default -like "headroom/*") -and $default -notmatch "-opencode") {
+            $ok = $false
+        }
+    }
     foreach ($pname in $cfg.provider.PSObject.Properties.Name) {
         $declared = @($cfg.provider.$pname.models.PSObject.Properties.Name)
         $whitelistProp = $cfg.provider.$pname.PSObject.Properties["whitelist"]
@@ -63,7 +70,7 @@ try {
             if ($whitelist -notcontains $key) { $ok = $false }
         }
     }
-    Check "config default is a pinned *-opencode model, every declared limit matches its Modelfile pin, and each picker whitelist matches its declared models" $ok
+    Check "every declared model is a pinned *-opencode variant, every declared limit matches its Modelfile pin, and each picker whitelist matches its declared models" $ok
 } catch { Warn "kit config could not be parsed; config checks skipped ($($_.Exception.Message))" }
 
 Write-Host "== ollama server =="

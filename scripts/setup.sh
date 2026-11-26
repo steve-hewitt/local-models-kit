@@ -188,31 +188,64 @@ fi
 fi
 
 # --- OpenCode config ------------------------------------------------------
-# The installed config's context limits and picker labels are written
-# from NUM_CTX / QWEN_NUM_CTX, so the config OpenCode budgets against
-# always matches the variants built above. The repo config stays the
-# 131072 default template; substitution happens only in the installed
-# copy. python3 does the structured edit; without it, install the
-# template as-is and say so.
+# Merge only the kit's two provider blocks into an existing config.
+# The repo config stays the 131072 template; substitution happens only
+# in the installed copy. The kit ships no default: existing "model"
+# fields are left alone unless KIT_SET_DEFAULT=1 asks for the primary
+# pinned variant. python3 does the structured merge; without it, leave
+# an existing config untouched and install the template only when there
+# is nothing to preserve.
 install_config() {
   if command -v python3 >/dev/null 2>&1; then
+    KIT_SET_DEFAULT="${KIT_SET_DEFAULT:-0}" \
+    PRIMARY_VARIANT="${BUILT_NAME:-}" \
     python3 - "$KIT_ROOT/config/opencode.json" "$CONFIG_PATH" "$NUM_CTX" "$QWEN_NUM_CTX" <<'PYEOF'
-import json, sys
+import json, os, sys
 src, dst = sys.argv[1], sys.argv[2]
 flint_ctx, qwen_ctx = int(sys.argv[3]), int(sys.argv[4])
+set_default = os.environ.get("KIT_SET_DEFAULT") == "1"
+primary = os.environ.get("PRIMARY_VARIANT", "").strip()
 def label(n):
     return f"{n // 1024}K" if n % 1024 == 0 else str(n)
-cfg = json.load(open(src))
+def load(path):
+    try:
+        with open(path) as f:
+            data = json.load(f)
+    except (OSError, ValueError) as exc:
+        raise SystemExit(f"cannot safely merge {path}: {exc}; left untouched")
+    if not isinstance(data, dict):
+        raise SystemExit(f"cannot safely merge {path}: top level is not a JSON object")
+    return data
+cfg = load(src)
 for provider in cfg["provider"].values():
     for key, model in provider["models"].items():
         ctx = qwen_ctx if key.startswith("qwen") else flint_ctx
         model["limit"]["context"] = ctx
         model["name"] = model["name"].replace("128K", label(ctx))
+if os.path.exists(dst):
+    existing = load(dst)
+else:
+    existing = {"$schema": cfg["$schema"], "provider": {}}
+providers = existing.setdefault("provider", {})
+if not isinstance(providers, dict):
+    raise SystemExit(f"cannot safely merge {dst}: provider is not a JSON object")
+for key in ("ollama", "headroom"):
+    providers[key] = cfg["provider"][key]
+if set_default:
+    if primary in ("flint-opencode", "qwen-opencode"):
+        existing["model"] = f"ollama/{primary}:latest"
+    else:
+        print("KIT_SET_DEFAULT=1 but no standard pinned variant was built; "
+              "no model field was written", file=sys.stderr)
 with open(dst, "w") as f:
-    json.dump(cfg, f, indent=2)
+    json.dump(existing, f, indent=2)
     f.write("\n")
-print(f"Kit config installed to {dst} (Flint context {flint_ctx}, Qwen context {qwen_ctx})")
+print(f"Kit provider blocks merged into {dst} (Flint context {flint_ctx}, Qwen context {qwen_ctx})")
 PYEOF
+  elif [ -f "$CONFIG_PATH" ]; then
+    echo "WARNING: python3 not found; cannot merge safely."
+    echo "Existing OpenCode config left untouched at $CONFIG_PATH."
+    echo "Install python3 and re-run to add the kit provider blocks."
   else
     cp "$KIT_ROOT/config/opencode.json" "$CONFIG_PATH"
     echo "Kit config installed to $CONFIG_PATH (default 131072 contexts; python3 not found, so NUM_CTX was not substituted into the installed copy)"
@@ -225,16 +258,8 @@ if [ -f "$CONFIG_PATH" ]; then
   BACKUP="$CONFIG_PATH.bak-$(date +%Y%m%d-%H%M%S)"
   cp "$CONFIG_PATH" "$BACKUP"
   echo "Existing OpenCode config backed up to $BACKUP"
-  printf "Overwrite global config with the kit config? (y/N) "
-  read -r answer
-  if [ "$answer" = "y" ]; then
-    install_config
-  else
-    echo "Skipped. Kit config is at $KIT_ROOT/config/opencode.json for per-project use."
-  fi
-else
-  install_config
 fi
+install_config
 
 echo
 if [ "$CLIENT_ONLY" = "1" ]; then

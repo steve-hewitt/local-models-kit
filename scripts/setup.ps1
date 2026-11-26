@@ -149,11 +149,12 @@ if ($env:WITH_QWEN -eq "1") {
 }
 
 # --- OpenCode config ------------------------------------------------------
-# The installed config's context limits and picker labels are written
-# from NUM_CTX / QWEN_NUM_CTX, so the config OpenCode budgets against
-# always matches the variants built above. The repo config stays the
-# 131072 default template; substitution happens only in the installed
-# copy.
+# Merge only the kit's two provider blocks into an existing config. The
+# installed context limits and picker labels are written from NUM_CTX /
+# QWEN_NUM_CTX, so OpenCode budgets against the variants built above.
+# The repo config stays the 131072 template; substitution happens only
+# in the installed copy. No top-level model is written unless
+# KIT_SET_DEFAULT=1.
 function CtxLabel($n) {
     if (([int]$n % 1024) -eq 0) { return "$([int]$n / 1024)K" } else { return "$n" }
 }
@@ -166,8 +167,36 @@ function InstallConfig($Dest) {
             $cfg.provider.$pname.models.$key.name = $cfg.provider.$pname.models.$key.name -replace "128K", (CtxLabel $ctx)
         }
     }
-    ($cfg | ConvertTo-Json -Depth 10) | Set-Content $Dest
-    Write-Host "Kit config installed to $Dest (Flint context $NumCtx, Qwen context $QwenNumCtx)"
+    if (Test-Path $Dest) {
+        try {
+            $existing = Get-Content $Dest -Raw | ConvertFrom-Json
+        } catch {
+            throw "cannot safely merge ${Dest}: $($_.Exception.Message); left untouched"
+        }
+        if ($existing -isnot [System.Management.Automation.PSCustomObject]) {
+            throw "cannot safely merge ${Dest}: top level is not a JSON object"
+        }
+    } else {
+        $existing = [pscustomobject]@{ '$schema' = $cfg.'$schema' }
+    }
+    if (-not $existing.PSObject.Properties["provider"]) {
+        $existing | Add-Member -MemberType NoteProperty -Name provider -Value ([pscustomobject]@{})
+    }
+    if ($existing.provider -isnot [System.Management.Automation.PSCustomObject]) {
+        throw "cannot safely merge ${Dest}: provider is not a JSON object"
+    }
+    foreach ($pname in @("ollama", "headroom")) {
+        $existing.provider | Add-Member -MemberType NoteProperty -Name $pname -Value $cfg.provider.$pname -Force
+    }
+    if ($env:KIT_SET_DEFAULT -eq "1") {
+        if ($BuiltName -in @("flint-opencode", "qwen-opencode")) {
+            $existing | Add-Member -MemberType NoteProperty -Name model -Value "ollama/${BuiltName}:latest" -Force
+        } else {
+            Write-Warning "KIT_SET_DEFAULT=1 but no standard pinned variant was built; no model field was written."
+        }
+    }
+    ($existing | ConvertTo-Json -Depth 20) | Set-Content $Dest
+    Write-Host "Kit provider blocks merged into $Dest (Flint context $NumCtx, Qwen context $QwenNumCtx)"
 }
 # ServerOnly skips this too: the config belongs to the OpenCode side,
 # which in that topology is the WSL home directory, not Windows.
@@ -183,17 +212,8 @@ if (Test-Path $ConfigPath) {
     $backup = "$ConfigPath.bak-$stamp"
     Copy-Item $ConfigPath $backup
     Write-Host "Existing OpenCode config backed up to $backup"
-    Write-Host "Review the diff and merge manually if you had custom settings:"
-    Write-Host "  Compare-Object (Get-Content $backup) (Get-Content $KitRoot\config\opencode.json)"
-    $answer = Read-Host "Overwrite global config with the kit config? (y/N)"
-    if ($answer -ne "y") {
-        Write-Host "Skipped config install. The kit config is at $KitRoot\config\opencode.json if you want it per-project instead."
-    } else {
-        InstallConfig $ConfigPath
-    }
-} else {
-    InstallConfig $ConfigPath
 }
+InstallConfig $ConfigPath
 }
 
 Write-Host ""

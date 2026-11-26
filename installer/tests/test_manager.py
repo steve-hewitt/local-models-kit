@@ -9,9 +9,10 @@ is all SKIP and rewrites nothing; an injected mid-install failure
 resumes from state; doctor catches a tampered config and repair
 fixes it; the .wslconfig merge preserves user lines with exactly one
 managed block after two installs; config substitution at 131072 and
-at 262144 with Qwen held at 131072; uninstall restores a backed-up
-config byte for byte and keeps models by default; uninstall on a
-never-installed root is a safe no-op.
+at 262144 with Qwen held at 131072; install merges providers without
+taking over a user model; uninstall removes only the kit provider
+blocks and keeps models by default; uninstall on a never-installed
+root is a safe no-op.
 """
 
 import json
@@ -193,6 +194,159 @@ class TestDoctorRepair(ManagerCase):
         self.assertTrue(any("Nothing to repair" in l for l in self.lines))
 
 
+class TestConfigMerge(ManagerCase):
+    """The kit installs providers as options and never takes over the
+    user's top-level model unless install --set-default asks it to."""
+
+    USER_CONFIG = {
+        "$schema": "https://opencode.ai/config.json",
+        "model": "anthropic/claude-sonnet-5",
+        "theme": "user-theme",
+        "provider": {
+            "unrelated": {
+                "npm": "@ai-sdk/openai-compatible",
+                "options": {"baseURL": "http://localhost:9999/v1"},
+                "models": {"keep-me": {"name": "Keep me"}},
+            }
+        },
+        "mcp": {"local": {"type": "local", "command": ["true"]}},
+    }
+
+    def write_user_config(self):
+        self.platform.wsl_write_file(
+            DISTRO, self.config_path(),
+            (json.dumps(self.USER_CONFIG, indent=2) + "\n").encode())
+
+    def write_old_kit_config(self):
+        old = mgr.render_config(131072, set_default=True)
+        self.platform.wsl_write_file(DISTRO, self.config_path(), old)
+        self.mgr.resolve_choices(set_default=False)
+        self.mgr.save_state()
+        state = json.loads((self.root / "state.json").read_bytes())
+        state["opencode_config"] = {
+            "path": self.config_path(),
+            "had_previous": False,
+            "installed_sha256": mgr.sha256_bytes(old),
+        }
+        (self.root / "state.json").write_text(
+            json.dumps(state, indent=2) + "\n")
+
+    def test_fresh_install_writes_no_model_field(self):
+        self.assertEqual(self.install(), 0)
+        cfg = json.loads(self.installed_config())
+        self.assertNotIn("model", cfg)
+        self.assertEqual(set(cfg), {"$schema", "provider"})
+
+    def test_install_preserves_user_model_and_unrelated_entries(self):
+        self.write_user_config()
+        self.assertEqual(self.install(), 0)
+        cfg = json.loads(self.installed_config())
+        self.assertEqual(cfg["model"], self.USER_CONFIG["model"])
+        self.assertEqual(cfg["theme"], self.USER_CONFIG["theme"])
+        self.assertEqual(cfg["mcp"], self.USER_CONFIG["mcp"])
+        self.assertEqual(cfg["provider"]["unrelated"],
+                         self.USER_CONFIG["provider"]["unrelated"])
+        for key in mgr.KIT_PROVIDER_KEYS:
+            self.assertIn(key, cfg["provider"])
+
+    def test_set_default_writes_the_primary_pinned_model(self):
+        self.assertEqual(self.install(set_default=True), 0)
+        cfg = json.loads(self.installed_config())
+        self.assertEqual(cfg["model"], "ollama/flint-opencode:latest")
+        state = json.loads((self.root / "state.json").read_bytes())
+        record = state["opencode_config"]
+        self.assertTrue(record["default_set_by_kit"])
+        self.assertEqual(record["kit_model"], "ollama/flint-opencode:latest")
+        self.assertFalse(record["previous_model_present"])
+
+    def test_set_default_without_flint_writes_qwen(self):
+        self.assertEqual(self.install(with_flint=False, set_default=True), 0)
+        cfg = json.loads(self.installed_config())
+        self.assertEqual(cfg["model"], "ollama/qwen-opencode:latest")
+
+    def test_upgrade_removes_a_kit_imposed_old_default(self):
+        self.write_old_kit_config()
+        self.new_manager()
+        self.assertEqual(self.install(), 0)
+        cfg = json.loads(self.installed_config())
+        self.assertNotIn("model", cfg)
+        self.assertTrue(any("kit-imposed old default" in line
+                            for line in self.lines), self.lines)
+
+    def test_doctor_accepts_user_keys_and_extra_provider_models(self):
+        self.assertEqual(self.install(), 0)
+        cfg = json.loads(self.installed_config())
+        cfg["model"] = "anthropic/claude-sonnet-5"
+        cfg["theme"] = "user-theme"
+        cfg["mcp"] = {"local": {"type": "local", "command": ["true"]}}
+        cfg["provider"]["unrelated"] = {"models": {"keep-me": {}}}
+        cfg["provider"]["headroom"]["models"]["gpt-4o"] = {
+            "name": "GPT-4o", "limit": {"context": 128000, "output": 16384}}
+        cfg["provider"]["headroom"].pop("whitelist", None)
+        self.platform.wsl_write_file(
+            DISTRO, self.config_path(),
+            (json.dumps(cfg, indent=2) + "\n").encode())
+        items = self.mgr.doctor_items()
+        l3 = [i for i in items if i["name"] == "L3 config"][0]
+        self.assertEqual(l3["status"], "PASS", l3)
+
+    def test_doctor_fails_when_a_kit_provider_limit_is_wrong(self):
+        self.assertEqual(self.install(), 0)
+        cfg = json.loads(self.installed_config())
+        cfg["provider"]["ollama"]["models"]["flint-opencode:latest"][
+            "limit"]["output"] = 1
+        self.platform.wsl_write_file(
+            DISTRO, self.config_path(),
+            (json.dumps(cfg, indent=2) + "\n").encode())
+        items = self.mgr.doctor_items()
+        l3 = [i for i in items if i["name"] == "L3 config"][0]
+        self.assertEqual(l3["status"], "FAIL", l3)
+        self.assertIn("limits differ", l3["detail"])
+
+    def test_uninstall_restores_a_prior_user_default_and_keeps_other_keys(self):
+        self.write_user_config()
+        self.assertEqual(self.install(set_default=True), 0)
+        cfg = json.loads(self.installed_config())
+        self.assertEqual(cfg["model"], "ollama/flint-opencode:latest")
+        self.assertEqual(cfg["provider"]["unrelated"],
+                         self.USER_CONFIG["provider"]["unrelated"])
+        state = json.loads((self.root / "state.json").read_bytes())
+        record = state["opencode_config"]
+        self.assertTrue(record["previous_model_present"])
+        self.assertEqual(record["previous_model"],
+                         self.USER_CONFIG["model"])
+
+        self.assertEqual(self.mgr.verb_uninstall(), 0)
+        cfg = json.loads(self.platform.wsl_read_file(
+            DISTRO, self.config_path()))
+        self.assertEqual(cfg["model"], self.USER_CONFIG["model"])
+        self.assertEqual(cfg["theme"], self.USER_CONFIG["theme"])
+        self.assertEqual(cfg["mcp"], self.USER_CONFIG["mcp"])
+        self.assertEqual(cfg["provider"]["unrelated"],
+                         self.USER_CONFIG["provider"]["unrelated"])
+        for key in mgr.KIT_PROVIDER_KEYS:
+            self.assertNotIn(key, cfg["provider"])
+
+    def test_uninstall_removes_a_kit_set_default_when_none_existed(self):
+        self.assertEqual(self.install(set_default=True), 0)
+        self.assertEqual(self.mgr.verb_uninstall(), 0)
+        self.assertIsNone(self.platform.wsl_read_file(
+            DISTRO, self.config_path()),
+            "a config created by the kit is removed when it has no user keys")
+
+    def test_repair_reapplies_the_recorded_default(self):
+        self.assertEqual(self.install(set_default=True), 0)
+        cfg = json.loads(self.installed_config())
+        cfg.pop("model", None)
+        self.platform.wsl_write_file(
+            DISTRO, self.config_path(),
+            (json.dumps(cfg, indent=2) + "\n").encode())
+        self.new_manager()
+        self.assertEqual(self.mgr.verb_repair(), 0)
+        cfg = json.loads(self.installed_config())
+        self.assertEqual(cfg["model"], "ollama/flint-opencode:latest")
+
+
 class TestWslconfig(ManagerCase):
     USER_FILE = (b"# my own settings\n[wsl2]\nmemory=32GB\n"
                  b"[experimental]\nautoProxy=true\n")
@@ -285,7 +439,7 @@ class TestUninstall(ManagerCase):
     def preseed_config(self):
         self.platform.wsl_write_file(DISTRO, self.config_path(), self.ORIGINAL)
 
-    def test_uninstall_restores_backup_and_keeps_models(self):
+    def test_uninstall_removes_kit_blocks_and_keeps_models(self):
         self.preseed_config()
         self.assertEqual(self.install(with_qwen=True), 0)
         self.assertNotEqual(self.installed_config(), self.ORIGINAL)
@@ -294,8 +448,8 @@ class TestUninstall(ManagerCase):
 
         self.assertEqual(self.mgr.verb_uninstall(), 0)
         restored = self.platform.wsl_read_file(DISTRO, self.config_path())
-        self.assertEqual(restored, self.ORIGINAL,
-                         "the backed-up config must return byte for byte")
+        self.assertEqual(json.loads(restored), json.loads(self.ORIGINAL),
+                         "uninstall must keep the user's keys and remove only the kit providers")
         self.assertIn("flint:latest", self.platform.tags)
         self.assertIn("qwen3:30b-a3b", self.platform.tags)
         self.assertEqual(self.platform.env, {},
@@ -477,6 +631,14 @@ class TestDefaultChoices(ManagerCase):
         self.assertTrue(choices["with_flint"])
         self.assertTrue(choices["with_qwen"])
         self.assertTrue(choices["with_comfyui"])
+        self.assertFalse(choices["set_default"])
+
+    def test_set_default_is_recorded_as_an_opt_in(self):
+        self.assertTrue(self.mgr.resolve_choices(set_default=True)["set_default"])
+        self.mgr.save_state()
+        self.assertTrue(self.new_manager().resolve_choices()["set_default"])
+        self.assertFalse(self.new_manager().resolve_choices(
+            set_default=False)["set_default"])
 
     def test_flag_opt_outs_win_over_the_default(self):
         # A fresh manager per assertion: resolve_choices records
@@ -551,11 +713,11 @@ class TestDefaultChoices(ManagerCase):
 
 class TestRenderConfigChoices(ManagerCase):
     """The rendered config advertises only the chosen models, in
-    both providers, and defaults to the first chosen variant."""
+    both providers, and ships no default unless asked."""
 
     def test_flint_out_removes_flint_everywhere(self):
         cfg = json.loads(mgr.render_config(131072, with_flint=False))
-        self.assertEqual(cfg["model"], "ollama/qwen-opencode:latest")
+        self.assertNotIn("model", cfg)
         for provider in cfg["provider"].values():
             self.assertFalse(any(k.startswith("flint")
                                  for k in provider["models"]))
@@ -568,7 +730,7 @@ class TestRenderConfigChoices(ManagerCase):
 
     def test_qwen_out_removes_qwen_everywhere(self):
         cfg = json.loads(mgr.render_config(131072, with_qwen=False))
-        self.assertEqual(cfg["model"], "ollama/flint-opencode:latest")
+        self.assertNotIn("model", cfg)
         for provider in cfg["provider"].values():
             self.assertFalse(any(k.startswith("qwen")
                                  for k in provider["models"]))
@@ -584,6 +746,13 @@ class TestRenderConfigChoices(ManagerCase):
             qwen = provider["models"]["qwen-opencode:latest"]
             self.assertEqual(qwen["limit"]["context"], 131072)
 
+    def test_set_default_inserts_the_first_chosen_variant(self):
+        flint = json.loads(mgr.render_config(131072, set_default=True))
+        self.assertEqual(flint["model"], "ollama/flint-opencode:latest")
+        qwen = json.loads(mgr.render_config(131072, with_flint=False,
+                                            set_default=True))
+        self.assertEqual(qwen["model"], "ollama/qwen-opencode:latest")
+
 
 class TestNoFlintInstall(ManagerCase):
     def test_install_without_flint_runs_on_qwen_only(self):
@@ -592,7 +761,7 @@ class TestNoFlintInstall(ManagerCase):
         self.assertEqual(self.platform.created, ["qwen-opencode"])
         self.assert_doctor_healthy()
         cfg = json.loads(self.installed_config())
-        self.assertEqual(cfg["model"], "ollama/qwen-opencode:latest")
+        self.assertNotIn("model", cfg)
         for provider in cfg["provider"].values():
             self.assertFalse(any(k.startswith("flint")
                                  for k in provider["models"]))

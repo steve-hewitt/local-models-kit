@@ -24,7 +24,7 @@ vocabulary of the state file, the log, and doctor's report:
   B2 WSL restarted so B1 takes effect
   L1 WSL distro detected (default Ubuntu)
   L2 OpenCode present inside the distro
-  L3 Kit OpenCode config installed inside the distro (backup first)
+  L3 Kit OpenCode provider blocks merged into the distro config (backup first)
   L4 Client-side smoke from inside WSL
   C1 ComfyUI portable present, pinned to the v0.46.0 archive
   C2 Z-Image-Turbo model files present, sizes pinned
@@ -84,6 +84,8 @@ FLINT_BASE_TAG = "flint"
 FLINT_VARIANT = "flint-opencode"
 QWEN_BASE_TAG = "qwen3:30b-a3b"
 QWEN_VARIANT = "qwen-opencode"
+
+KIT_PROVIDER_KEYS = ("ollama", "headroom")
 
 DEFAULT_NUM_CTX = 131072
 MAX_NUM_CTX = 262144  # Flint's documented ceiling
@@ -193,7 +195,7 @@ def _clean_opencode_version(text: str):
 # from a repo checkout it prefers the live files (see _load_template).
 FLINT_MODELF_TEMPLATE = "# Context-pinned Flint variant for OpenCode.\n# Build it with:\n#   ollama create flint-opencode -f models/Modelfile.flint-opencode\n# Verify with:\n#   ollama show flint-opencode --parameters\n# The setup scripts rewrite this file's FROM line to the tag they\n# pulled (MODEL_TAG) before building, so a non-default Flint tag pins\n# itself rather than the default build named below.\n#\n# Why bake this in instead of relying on client settings?\n# Ollama's runtime context defaults are much smaller than Flint's 262K\n# maximum, and client-side settings do not reliably override them.\n# A Modelfile is the one place the value always wins.\n#\n# 131072 (128K) is the kit default since 2026-11-09: 32K proved\n# unusable for real agent work and 128K is the floor. Flint's own ceiling is 262K; the setup scripts honor NUM_CTX\n# to rebuild this variant higher (they rewrite this line in the temp\n# copy they build from). The KV cache grows linearly with context;\n# see docs/HARDWARE.md before raising it on a 64 GB machine.\n#\n# num_predict is 32768 for Flint: Recursive's model card recommends an\n# output budget of at least 32768 tokens for hard problems, reasoning\n# included. At the old 8192 a hard turn could spend the whole budget\n# thinking and get cut off before answering. Qwen's variant stays 8192.\n\nFROM flint\n\nPARAMETER num_ctx 131072\nPARAMETER num_predict 32768\n"
 QWEN_MODELF_TEMPLATE = "# Context-pinned Qwen3-30B-A3B variant for OpenCode.\n# Build it with:\n#   ollama create qwen-opencode -f models/Modelfile.qwen-opencode\n# (The setup scripts build this automatically when WITH_QWEN=1, and\n# rewrite the FROM line below to the tag they pulled, so a non-default\n# Qwen tag pins itself rather than the default tag named below.)\n# Same reasoning as the Flint Modelfile: bake the context in so the\n# runtime default cannot silently shrink it. 131072 is both the kit\n# default and this model's documented ceiling: Qwen3-30B-A3B is a\n# 32,768-native model that reaches 131,072 with YaRN (Qwen model card\n# and technical report). Do not raise Qwen past it; the setup scripts\n# keep Qwen on QWEN_NUM_CTX (default 131072) even when NUM_CTX raises\n# the Flint pin higher.\n\nFROM qwen3:30b-a3b\n\nPARAMETER num_ctx 131072\nPARAMETER num_predict 8192\n"
-CONFIG_TEMPLATE_JSON = '{\n  "$schema": "https://opencode.ai/config.json",\n  "model": "ollama/flint-opencode:latest",\n  "provider": {\n    "ollama": {\n      "models": {\n        "flint-opencode:latest": {\n          "limit": {\n            "context": 131072,\n            "output": 32768\n          },\n          "name": "Flint 40B, context-pinned 128K",\n          "tool_call": true\n        },\n        "qwen-opencode:latest": {\n          "limit": {\n            "context": 131072,\n            "output": 8192\n          },\n          "name": "Qwen3 30B A3B, context-pinned 128K",\n          "tool_call": true\n        }\n      },\n      "name": "Ollama (local)",\n      "npm": "@ai-sdk/openai-compatible",\n      "options": {\n        "baseURL": "http://localhost:11434/v1"\n      },\n      "whitelist": [\n        "flint-opencode:latest",\n        "qwen-opencode:latest"\n      ]\n    },\n    "headroom": {\n      "models": {\n        "flint-opencode:latest": {\n          "limit": {\n            "context": 131072,\n            "output": 32768\n          },\n          "name": "Flint 40B, context-pinned 128K, via Headroom",\n          "tool_call": true\n        },\n        "qwen-opencode:latest": {\n          "limit": {\n            "context": 131072,\n            "output": 8192\n          },\n          "name": "Qwen3 30B A3B, context-pinned 128K, via Headroom",\n          "tool_call": true\n        }\n      },\n      "name": "Headroom proxy (local)",\n      "npm": "@ai-sdk/openai-compatible",\n      "options": {\n        "baseURL": "http://127.0.0.1:8787/v1"\n      },\n      "whitelist": [\n        "flint-opencode:latest",\n        "qwen-opencode:latest"\n      ]\n    }\n  }\n}\n'
+CONFIG_TEMPLATE_JSON = '{\n  "$schema": "https://opencode.ai/config.json",\n  "provider": {\n    "ollama": {\n      "models": {\n        "flint-opencode:latest": {\n          "limit": {\n            "context": 131072,\n            "output": 32768\n          },\n          "name": "Flint 40B, context-pinned 128K",\n          "tool_call": true\n        },\n        "qwen-opencode:latest": {\n          "limit": {\n            "context": 131072,\n            "output": 8192\n          },\n          "name": "Qwen3 30B A3B, context-pinned 128K",\n          "tool_call": true\n        }\n      },\n      "name": "Ollama (local)",\n      "npm": "@ai-sdk/openai-compatible",\n      "options": {\n        "baseURL": "http://localhost:11434/v1"\n      },\n      "whitelist": [\n        "flint-opencode:latest",\n        "qwen-opencode:latest"\n      ]\n    },\n    "headroom": {\n      "models": {\n        "flint-opencode:latest": {\n          "limit": {\n            "context": 131072,\n            "output": 32768\n          },\n          "name": "Flint 40B, context-pinned 128K, via Headroom",\n          "tool_call": true\n        },\n        "qwen-opencode:latest": {\n          "limit": {\n            "context": 131072,\n            "output": 8192\n          },\n          "name": "Qwen3 30B A3B, context-pinned 128K, via Headroom",\n          "tool_call": true\n        }\n      },\n      "name": "Headroom proxy (local)",\n      "npm": "@ai-sdk/openai-compatible",\n      "options": {\n        "baseURL": "http://127.0.0.1:8787/v1"\n      },\n      "whitelist": [\n        "flint-opencode:latest",\n        "qwen-opencode:latest"\n      ]\n    }\n  }\n}\n'
 
 STEP_ORDER = ["W1", "W2", "W3", "W4", "W5", "W6", "B1", "B2",
               "L1", "L2", "L3", "L4", "C1", "C2", "C3", "C4"]
@@ -220,7 +222,7 @@ STEP_PLAN = {
     "L2": ("OpenCode present in the distro",
            "the canonical binary ~/.opencode/bin/opencode answers by absolute path, and a login shell finds it on PATH"),
     "L3": ("Kit config installed in the distro",
-           "~/.config/opencode/opencode.json matches the rendered template byte for byte"),
+           "both kit provider blocks are present and structurally match the template; user keys and a user default are preserved"),
     "L4": ("Client-side smoke from WSL",
            "from inside the distro: the API answers, the variant is listed, its num_ctx is pinned"),
     "C1": ("ComfyUI portable installed",
@@ -855,18 +857,29 @@ def render_modelfile(template_text: str, from_tag: str, num_ctx: int) -> bytes:
     return text.encode("utf-8")
 
 
+def primary_model(with_flint: bool = True) -> str:
+    """The pinned model a launcher or --set-default uses."""
+    variant = FLINT_VARIANT if with_flint else QWEN_VARIANT
+    return f"ollama/{variant}:latest"
+
+
 def render_config(num_ctx: int, qwen_num_ctx: int = QWEN_NUM_CTX,
-                  with_flint: bool = True, with_qwen: bool = True) -> bytes:
-    """The installed OpenCode config: the template with each model's
-    context limit and picker label written from the chosen pins,
-    exactly as setup.ps1 and setup.sh render it. Qwen keys always get
+                  with_flint: bool = True, with_qwen: bool = True,
+                  set_default: bool = False) -> bytes:
+    """The kit's OpenCode provider blocks, with each model's context
+    limit and picker label written from the chosen pins, exactly as
+    setup.ps1 and setup.sh render them. Qwen keys always get
     qwen_num_ctx, so raising Flint never drags Qwen past its ceiling,
     and each provider's whitelist exactly matches its declared models.
 
     Models the install leaves out are removed from every provider,
-    models and whitelist alike, and the default model becomes the
-    first chosen variant: the config never advertises a model the
-    install did not pull (the 2026-10-24 P0 hygiene rule).
+    models and whitelist alike: the config never advertises a model
+    the install did not pull (the 2026-10-24 P0 hygiene rule).
+
+    The kit ships no default model. ``set_default`` is only for the
+    explicit opt-in paths (``install --set-default`` and the legacy
+    template probe); it inserts the first chosen variant as the
+    top-level model.
     """
     template = load_template_text("config/opencode.json", CONFIG_TEMPLATE_JSON)
     cfg = json.loads(template)
@@ -886,9 +899,91 @@ def render_config(num_ctx: int, qwen_num_ctx: int = QWEN_NUM_CTX,
             if "name" in model:
                 model["name"] = model["name"].replace("128K", ctx_label(ctx))
         provider["whitelist"] = list(models.keys())
-    primary = FLINT_VARIANT if with_flint else QWEN_VARIANT
-    cfg["model"] = f"ollama/{primary}:latest"
+    if set_default:
+        ordered = {}
+        if "$schema" in cfg:
+            ordered["$schema"] = cfg.pop("$schema")
+        ordered["model"] = primary_model(with_flint)
+        ordered.update(cfg)
+        cfg = ordered
     return (json.dumps(cfg, indent=2) + "\n").encode("utf-8")
+
+
+def parse_config_bytes(data: bytes, where: str = "OpenCode config") -> dict:
+    """Parse a config as a JSON object, or fail with an actionable
+    message. The manager never guesses at malformed JSON: it leaves
+    the file alone rather than clobbering a user's settings."""
+    try:
+        cfg = json.loads(data.decode("utf-8"))
+    except (ValueError, UnicodeDecodeError) as exc:
+        raise StepError(
+            f"{where} is not valid JSON ({exc}); fix or move it aside, "
+            "then re-run")
+    if not isinstance(cfg, dict):
+        raise StepError(f"{where} must be a JSON object, not "
+                        f"{type(cfg).__name__}")
+    return cfg
+
+
+def merge_kit_providers(existing_bytes, kit_cfg: dict) -> dict:
+    """Merge only the kit's two provider blocks, preserving every
+    other key and value. No existing config means a fresh file with
+    $schema and the two providers only."""
+    if existing_bytes is None:
+        merged = {}
+        if "$schema" in kit_cfg:
+            merged["$schema"] = kit_cfg["$schema"]
+        merged["provider"] = {key: kit_cfg["provider"][key]
+                              for key in KIT_PROVIDER_KEYS}
+        return merged
+    merged = parse_config_bytes(existing_bytes)
+    providers = merged.get("provider")
+    if providers is None:
+        providers = {}
+        merged["provider"] = providers
+    if not isinstance(providers, dict):
+        raise StepError(
+            "the existing OpenCode config's 'provider' value is not a "
+            "JSON object; fix or move the config aside, then re-run")
+    for key in KIT_PROVIDER_KEYS:
+        providers[key] = kit_cfg["provider"][key]
+    return merged
+
+
+def dump_config(cfg: dict) -> bytes:
+    return (json.dumps(cfg, indent=2) + "\n").encode("utf-8")
+
+
+def provider_mismatch(current: dict, wanted: dict):
+    """Return None when the kit's provider contract is present and
+    correct, else a human-readable reason. Extra keys and extra models
+    are tolerated: Headroom wrap and users add their own rows."""
+    if not isinstance(current, dict):
+        return "provider block is not a JSON object"
+    current_models = current.get("models")
+    wanted_models = wanted.get("models", {})
+    if not isinstance(current_models, dict):
+        return "provider has no models object"
+    for key, wanted_model in wanted_models.items():
+        if key not in current_models:
+            return f"model {key} is missing"
+        current_model = current_models[key]
+        if not isinstance(current_model, dict):
+            return f"model {key} is not a JSON object"
+        if current_model.get("limit") != wanted_model.get("limit"):
+            return f"model {key} limits differ"
+    if current.get("options", {}).get("baseURL") != \
+            wanted.get("options", {}).get("baseURL"):
+        return "baseURL differs"
+    current_whitelist = current.get("whitelist")
+    if current_whitelist is not None:
+        if not isinstance(current_whitelist, list):
+            return "whitelist is not a list"
+        missing = [key for key in wanted.get("whitelist", [])
+                   if key not in current_whitelist]
+        if missing:
+            return "whitelist is missing " + ", ".join(missing)
+    return None
 
 
 class Manager:
@@ -959,12 +1054,14 @@ class Manager:
 
     def resolve_choices(self, with_flint=None, with_qwen=None, num_ctx=None,
                         distro=None, with_comfyui=None,
-                        comfy_root=None) -> dict:
+                        comfy_root=None, set_default=None) -> dict:
         """CLI flags beat the recorded choices, which beat env and
         defaults, so re-running install resumes with the same shape.
         The full stack (Flint, Qwen, ComfyUI) is the default shape;
         the --no-* flags opt a component out, and the --with-* flags
-        are the way back in when recorded state holds an opt-out."""
+        are the way back in when recorded state holds an opt-out.
+        ``set_default=None`` reuses the recorded default choice, which
+        is what repair needs; install always passes an explicit bool."""
         state = self.load_state()
         recorded = state.get("choices", {})
 
@@ -996,6 +1093,9 @@ class Manager:
         if isinstance(chosen_comfy, str):
             chosen_comfy = chosen_comfy == "1"
         chosen_comfy_root = pick(comfy_root, "comfy_root", None, None)
+        chosen_default = pick(set_default, "set_default", None, False)
+        if isinstance(chosen_default, str):
+            chosen_default = chosen_default == "1"
         choices = {
             "with_flint": bool(chosen_flint),
             "with_qwen": bool(chosen_qwen),
@@ -1004,6 +1104,7 @@ class Manager:
             "distro": chosen_distro,
             "with_comfyui": bool(chosen_comfy),
             "comfy_root": str(chosen_comfy_root) if chosen_comfy_root else None,
+            "set_default": bool(chosen_default),
         }
         if not choices["with_flint"] and not choices["with_qwen"]:
             raise StepError(
@@ -1031,7 +1132,7 @@ class Manager:
     def _primary_variant(self, choices: dict):
         """(variant, its pinned num_ctx) for the first chosen model:
         Flint when chosen, else Qwen. W6 and L4 verify against it,
-        and the rendered config defaults to it."""
+        and --set-default uses it as the opt-in default."""
         _pulls, builds = self.desired_models(choices)
         if not builds:
             return FLINT_VARIANT, choices.get("num_ctx", DEFAULT_NUM_CTX)
@@ -1854,11 +1955,31 @@ class Manager:
         base = home or "~"
         return f"{base}/.config/opencode/opencode.json"
 
+    def _render_config_for_choices(self, choices: dict,
+                                   set_default: bool = False) -> bytes:
+        return render_config(
+            choices["num_ctx"], choices["qwen_num_ctx"],
+            with_flint=choices.get("with_flint", True),
+            with_qwen=choices.get("with_qwen", True),
+            set_default=set_default)
+
     def _desired_config(self) -> bytes:
-        choices = self.load_state()["choices"]
-        return render_config(choices["num_ctx"], choices["qwen_num_ctx"],
-                             with_flint=choices.get("with_flint", True),
-                             with_qwen=choices.get("with_qwen", True))
+        return self._render_config_for_choices(self.load_state()["choices"])
+
+    def _legacy_default_imposed(self, record: dict, existing: bytes,
+                                cfg: dict, choices: dict) -> bool:
+        """True only when the current top-level default is the old
+        kit's default and the state or the exact old template proves
+        the kit wrote it. A user who chose the same model by hand is
+        left alone."""
+        legacy_model = primary_model(choices.get("with_flint", True))
+        if cfg.get("model") != legacy_model:
+            return False
+        if record.get("default_set_by_kit") and record.get("kit_model"):
+            return False  # a new-style opt-in owns it, not the old default
+        if record.get("installed_sha256") == sha256_bytes(existing):
+            return True
+        return existing == self._render_config_for_choices(choices, True)
 
     def check_l3(self):
         distro = self._distro_name()
@@ -1866,19 +1987,99 @@ class Manager:
         current = self.platform.wsl_read_file(distro, path)
         if current is None:
             return "missing", f"no config at {path}"
-        if current == self._desired_config():
-            return "ok", "installed config matches the rendered template"
-        return "drifted", "installed config differs from the rendered template"
+        try:
+            cfg = parse_config_bytes(current, f"the config at {path}")
+        except StepError as exc:
+            return "drifted", str(exc)
+        state = self.load_state()
+        choices = state["choices"]
+        record = state.get("opencode_config", {})
+        desired = json.loads(self._desired_config())
+        providers = cfg.get("provider")
+        if not isinstance(providers, dict):
+            return "drifted", "the config has no provider object"
+        for key in KIT_PROVIDER_KEYS:
+            if key not in providers:
+                return "drifted", f"the {key} provider block is missing"
+            reason = provider_mismatch(providers[key],
+                                       desired["provider"][key])
+            if reason:
+                return "drifted", f"the {key} provider block: {reason}"
+        if self._legacy_default_imposed(record, current, cfg, choices):
+            return "drifted", ("the old kit-imposed default model is still "
+                               "present; re-run install or repair")
+        if record.get("default_set_by_kit"):
+            wanted = record.get("kit_model") or primary_model(
+                choices.get("with_flint", True))
+            if cfg.get("model") != wanted:
+                return "drifted", (f"the kit set the default to {wanted!r}, "
+                                   f"but the config has {cfg.get('model')!r}")
+        return "ok", "kit provider blocks match the template"
 
     def apply_l3(self):
         self._maybe_fail("L3")
         distro = self._distro_name()
         path = self._config_path_in_wsl(distro)
         state = self.load_state()
-        desired = self._desired_config()
-        existing = self.platform.wsl_read_file(distro, path)
+        choices = state["choices"]
         record = state.setdefault("opencode_config", {})
-        if existing is not None and existing != desired:
+        existing = self.platform.wsl_read_file(distro, path)
+        existing_cfg = None
+        if existing is not None:
+            existing_cfg = parse_config_bytes(
+                existing, f"the existing config at {path}")
+            record.setdefault("had_previous", True)
+        else:
+            record.setdefault("had_previous", False)
+        legacy_imposed = (existing is not None and
+                          self._legacy_default_imposed(
+                              record, existing, existing_cfg, choices))
+        kit_cfg = json.loads(self._desired_config())
+        merged = merge_kit_providers(existing, kit_cfg)
+        set_default = bool(choices.get("set_default", False))
+        wanted = primary_model(choices.get("with_flint", True))
+
+        current_present = "model" in merged
+        current_model = merged.get("model")
+        owns = bool(record.get("default_set_by_kit"))
+        if owns and (not current_present or
+                     current_model != record.get("kit_model")):
+            # The user changed or removed the kit's default after
+            # install; it is theirs now.
+            owns = False
+            record["default_set_by_kit"] = False
+            record.pop("kit_model", None)
+            record.pop("previous_model", None)
+            record.pop("previous_model_present", None)
+
+        if set_default:
+            if not owns and not legacy_imposed:
+                record["previous_model_present"] = current_present
+                record["previous_model"] = current_model if current_present else None
+            elif legacy_imposed and "previous_model_present" not in record:
+                # The old default was kit-imposed, not a user value.
+                record["previous_model_present"] = False
+                record["previous_model"] = None
+            merged["model"] = wanted
+            record["default_set_by_kit"] = True
+            record["kit_model"] = wanted
+            action = f"set the default model to {wanted}"
+        elif legacy_imposed:
+            merged.pop("model", None)
+            record["default_set_by_kit"] = False
+            record.pop("kit_model", None)
+            record.pop("previous_model", None)
+            record.pop("previous_model_present", None)
+            action = "removed the kit-imposed old default model"
+        elif owns:
+            action = f"kept the kit default model {current_model}"
+        elif current_present:
+            action = "left your model field unchanged"
+        else:
+            action = "no default model"
+
+        new_bytes = dump_config(merged)
+        if existing is not None and existing != new_bytes:
             stamp = self.platform.now().strftime("%Y%m%d-%H%M%S")
             backup = f"{path}.bak-{stamp}"
             counter = 0
@@ -1886,22 +2087,19 @@ class Manager:
                 counter += 1
                 backup = f"{path}.bak-{stamp}-{counter}"
             if not self.platform.wsl_copy_file(distro, path, backup):
-                raise StepError(f"could not back up the existing config to {backup}")
+                raise StepError(
+                    f"could not back up the existing config to {backup}")
             record["backup_path"] = backup
             record["backup_sha256"] = sha256_bytes(existing)
-            record["had_previous"] = True
-        elif existing is None:
-            record.setdefault("had_previous", False)
-        self.platform.wsl_write_file(distro, path, desired)
+        self.platform.wsl_write_file(distro, path, new_bytes)
         record["path"] = path
-        record["installed_sha256"] = sha256_bytes(desired)
-        choices = state["choices"]
+        record["installed_sha256"] = sha256_bytes(new_bytes)
         pins = []
         if choices.get("with_flint", True):
             pins.append(f"Flint context {choices['num_ctx']}")
         if choices.get("with_qwen", True):
             pins.append(f"Qwen context {choices['qwen_num_ctx']}")
-        return (f"config installed ({', '.join(pins)}"
+        return (f"config installed ({', '.join(pins)}; {action}"
                 + (f"; previous config backed up to {record.get('backup_path')}"
                    if record.get("backup_path") else "") + ")")
 
@@ -2477,12 +2675,14 @@ class Manager:
     # ---------- verbs ----------
 
     def verb_install(self, with_flint=None, with_qwen=None, num_ctx=None,
-                     distro=None, with_comfyui=None, comfy_root=None) -> int:
+                     distro=None, with_comfyui=None, comfy_root=None,
+                     set_default=False) -> int:
         choices = self.resolve_choices(with_flint=with_flint,
                                        with_qwen=with_qwen,
                                        num_ctx=num_ctx, distro=distro,
                                        with_comfyui=with_comfyui,
-                                       comfy_root=comfy_root)
+                                       comfy_root=comfy_root,
+                                       set_default=set_default)
         blockers = self.preflight(choices)
         if blockers:
             self.log("Preflight found problems; nothing was changed:")
@@ -2514,6 +2714,11 @@ class Manager:
                      f"{self.state_path}. Run install first.")
             return 1
         choices = self.resolve_choices()
+        # Repair re-applies the default the kit actually set, even if
+        # a later no-flag install recorded set_default=False.
+        state = self.load_state()
+        choices["set_default"] = bool(
+            state.get("opencode_config", {}).get("default_set_by_kit", False))
         self.run_all_steps(choices, repair=True)
         self.log("Repair pass complete; running doctor:")
         return self.print_doctor(self.doctor_items())
@@ -2713,42 +2918,55 @@ class Manager:
                          "with --remove-comfyui to remove it (user "
                          "files inside it are never deleted).")
 
-        # OpenCode config: restore the backup byte for byte when one
-        # exists; remove the kit's config when it replaced nothing;
-        # leave a config the user changed after install alone.
+        # OpenCode config: remove only the kit's two provider blocks.
+        # If the kit set the default model, restore the value it
+        # replaced (or remove the field when there was none). Every
+        # other key, provider, and MCP entry is the user's.
         record = state.get("opencode_config", {})
         config_path = record.get("path")
         if config_path:
-            backup = record.get("backup_path")
-            if backup and p.wsl_file_exists(distro, backup):
-                if p.wsl_copy_file(distro, backup, config_path):
-                    restored = p.wsl_read_file(distro, config_path)
-                    if restored is not None and sha256_bytes(restored) == \
-                            record.get("backup_sha256"):
-                        self.say("DONE", "L3 config",
-                                 f"restored your previous config from {backup}")
-                        p.wsl_run(distro, ["bash", "-c",
-                                           f"rm -- {shlex.quote(backup)}"],
-                                  timeout=30)
-                    else:
-                        self.log("WARN  L3 config: restore did not verify "
-                                 "byte for byte; the backup is kept at "
-                                 f"{backup}")
+            current = p.wsl_read_file(distro, config_path)
+            if current is None:
+                self.log("WARN  L3 config: the config is already gone")
+            else:
+                try:
+                    cfg = parse_config_bytes(
+                        current, f"the config at {config_path}")
+                except StepError as exc:
+                    self.log(f"WARN  L3 config: {exc}; left in place")
                 else:
-                    self.log(f"WARN  L3 config: could not copy {backup} back")
-            elif record.get("installed_sha256"):
-                current = p.wsl_read_file(distro, config_path)
-                if current is not None and \
-                        sha256_bytes(current) == record["installed_sha256"]:
-                    p.wsl_run(distro, ["bash", "-c",
-                                       f"rm -- {shlex.quote(config_path)}"],
-                              timeout=30)
-                    self.say("DONE", "L3 config",
-                             "removed the kit config (it had replaced nothing)")
-                elif current is not None:
-                    self.log("WARN  L3 config: the config changed after "
-                             "install, so it is left in place; the kit "
-                             "will not delete your edits")
+                    providers = cfg.get("provider")
+                    removed = []
+                    if isinstance(providers, dict):
+                        for key in KIT_PROVIDER_KEYS:
+                            if key in providers:
+                                del providers[key]
+                                removed.append(key)
+                        if not providers:
+                            cfg.pop("provider", None)
+                    model_note = "left your model field unchanged"
+                    if record.get("default_set_by_kit"):
+                        if record.get("previous_model_present"):
+                            cfg["model"] = record.get("previous_model")
+                            model_note = ("restored your previous model "
+                                          f"{record.get('previous_model')!r}")
+                        else:
+                            cfg.pop("model", None)
+                            model_note = "removed the kit-set default model"
+                    if (not record.get("had_previous") and
+                            "provider" not in cfg and
+                            set(cfg) <= {"$schema"}):
+                        p.wsl_run(distro, ["bash", "-c",
+                                           f"rm -- {shlex.quote(config_path)}"],
+                                  timeout=30)
+                        self.say("DONE", "L3 config",
+                                 "removed the kit-created config")
+                    else:
+                        p.wsl_write_file(distro, config_path, dump_config(cfg))
+                        self.say("DONE", "L3 config",
+                                 "removed the kit provider blocks"
+                                 + (f" ({', '.join(removed)})" if removed else "")
+                                 + f"; {model_note}")
 
         # .wslconfig managed block.
         self.say("DONE", "B1 .wslconfig", self._remove_wslconfig_block()
@@ -2833,7 +3051,8 @@ def print_plan(out=print) -> None:
         "--no-comfyui leave a component out (at least one model "
         "must stay). --num-ctx sets the Flint pin "
         "(default 131072, max 262144); the Qwen pin is always "
-        "131072. --comfy-root sets where the portable lives.")
+        "131072. --comfy-root sets where the portable lives. No "
+        "top-level model is written unless --set-default is passed.")
     out("Preflight first: Windows build, disk space, WSL and distro, "
         "network, the Ollama endpoint. All blockers print at once.")
     for step_id in STEP_ORDER:
@@ -2885,6 +3104,12 @@ def main(argv=None) -> int:
     p_install.add_argument("--comfy-root", default=None,
                            help="where the ComfyUI portable lives "
                                 "(default C:\\ComfyUI)")
+    p_install.add_argument("--set-default", action="store_true",
+                           help="make the primary pinned model the "
+                                "top-level OpenCode default (Flint, "
+                                "or Qwen with --no-flint); without "
+                                "this flag an existing model field "
+                                "is left alone")
     p_install.add_argument("--root", default=None)
     p_install.add_argument("--plan", action="store_true",
                            help="print the step plan and exit (runs anywhere)")
@@ -2943,7 +3168,8 @@ def main(argv=None) -> int:
                                         num_ctx=args.num_ctx,
                                         distro=args.distro,
                                         with_comfyui=with_comfyui,
-                                        comfy_root=args.comfy_root)
+                                        comfy_root=args.comfy_root,
+                                        set_default=args.set_default)
         if args.verb == "doctor":
             return manager.verb_doctor()
         if args.verb == "repair":

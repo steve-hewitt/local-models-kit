@@ -7,21 +7,19 @@
 # OpenCode's prompt; that was the first hands-on run's main failure
 # (2026-10-24).
 #
-# How the model gets selected depends on the OpenCode line (verified
-# hands-on against the real OpenCode 2.2.6 binary, 2026-11-07):
+# How the model gets selected depends on the OpenCode line. This
+# script pins only the session it launches; a bare `opencode` is
+# unaffected.
 #   - OpenCode 1: the top-level -m flag exists, so this script passes
-#     it explicitly as belt-and-suspenders over the config default.
+#     it explicitly.
 #   - OpenCode 2: the top-level -m flag is gone ("Unrecognized flag:
-#     -m in command opencode"), and there is no top-level --model in
-#     the root command either. An interactive v2 session takes its
-#     model from the installed config default, which kit setup sets
-#     to the same pinned variant (verified: a bare v2 launch with the
-#     kit config and a reachable server opens on the pinned Flint
-#     model). So on v2 this script launches bare and tells you to
-#     check the TUI footer, which names the live model; /models
-#     switches it if it ever differs.
-# (`opencode run` still accepts -m/--model on both lines, verified in
-# the v2.2.6 `run --help`; the compare harness is unaffected.)
+#     -m in command opencode"), and there is no root --model either.
+#     The script sets OPENCODE_CONFIG_CONTENT with a {"model": ...}
+#     snippet and passes --standalone. Verified on 2.0.26, 2026-11-26:
+#     with --standalone the TUI footer names the pinned Flint; without
+#     it the shared background service ignores the env snippet.
+# (`opencode run` still accepts -m/--model on both lines; the compare
+# harness is unaffected.)
 #
 # OLLAMA_CONTEXT_LENGTH is set below for one case only: an Ollama
 # server started from THIS shell reads it at startup. The usual Windows
@@ -37,20 +35,21 @@ $major = $null
 if ($verRaw -match "(\d+)\.\d+\.\d+") { $major = $Matches[1] }
 if ($major -eq "1") {
     Write-Host "OpenCode 1: passing -m $Model explicitly (the v1 top-level flag)."
+    Write-Host "Kit launches pin the model for this session only; bare opencode is unaffected."
     Write-Host "In the TUI, /models should show the row labeled 'Flint 40B, context-pinned 128K' ($Model)."
     Write-Host "Do not pick a raw flint:latest row if an older installed config shows one: it is the unpinned base tag."
     opencode -m $Model
 } elseif ($major -eq "2") {
-    Write-Host "OpenCode 2: v2 has no top-level model flag; the session model is the config default"
-    Write-Host "installed by setup, which is $Model. Check the TUI footer: it must name the pinned Flint"
-    Write-Host "model. If it names anything else, switch with /models by selecting the row labeled"
-    Write-Host "'Flint 40B, context-pinned 128K'. A raw flint:latest row may appear in the picker"
-    Write-Host "despite the whitelist; do not pick it, it is the unpinned base tag."
-    opencode
+    Write-Host "OpenCode 2: pinning this session with OPENCODE_CONFIG_CONTENT and --standalone."
+    Write-Host "Kit launches pin the model for this session only; bare opencode is unaffected."
+    Write-Host "The TUI footer must name 'Flint 40B, context-pinned 128K' ($Model)."
+    Write-Host "A raw flint:latest row may appear in the picker; do not pick it, it is the unpinned base tag."
+    $env:OPENCODE_CONFIG_CONTENT = "{`"model`":`"$Model`"}"
+    opencode --standalone
 } else {
     Write-Host "WARNING: could not parse an OpenCode version from 'opencode --version' (got '$verRaw')." -ForegroundColor Yellow
-    Write-Host "Launching without a model flag. In the TUI, verify with /models that the live model is"
+    Write-Host "Launching without a model pin. In the TUI, verify with /models that the live model is"
     Write-Host "$Model (picker label 'Flint 40B, context-pinned 128K') before doing agent work; if it is"
-    Write-Host "not selected, switch to that labeled row there."
+    Write-Host "not selected, switch to that labeled row there. Bare opencode is unaffected by this script."
     opencode
 }

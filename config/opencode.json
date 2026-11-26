@@ -1,6 +1,5 @@
 {
   "$schema": "https://opencode.ai/config.json",
-  "model": "ollama/flint-opencode:latest",
   "provider": {
     "ollama": {
       "models": {

@@ -31,6 +31,13 @@ Linux/macOS: install `zstd` first on Debian/Ubuntu, then use
 `scripts/setup.sh`, `scripts/smoke-test.sh`, `scripts/launch-direct.sh`, and
 `scripts/launch-headroom.sh`.
 
+The setup scripts merge the two provider blocks into an existing OpenCode
+config and leave its `model` field alone. To have them write the primary
+pinned model (Flint, or Qwen when that is what they built), set
+`KIT_SET_DEFAULT=1` before running the script (PowerShell:
+`$env:KIT_SET_DEFAULT = "1"`). The launch scripts pin only their own session;
+a bare `opencode` is unaffected.
+
 ## Windows serves, WSL drives
 
 Follow [docs/WSL.md](docs/WSL.md). It is the complete step-by-step for this

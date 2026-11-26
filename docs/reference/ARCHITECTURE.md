@@ -13,8 +13,9 @@
 Two first-class models ship with the kit. Both are installed by the default
 installer, both are declared under both providers as context-pinned variants
 at 128K, and both are selected the same way: `/models` inside OpenCode, or
-`opencode run -m ...` per run. Flint is the shipped default; Qwen is an equal
-choice.
+`opencode run -m ...` per run. Neither is a startup default: the kit installs
+providers as options. `install --set-default` opts in, and the kit launch
+scripts pin the model for their own session only.
 
 | | Recursive Flint | Qwen3-30B-A3B |
 | --- | --- | --- |
@@ -54,7 +55,7 @@ models, and the same working agreement applies to Qwen.
 ### OpenCode (the agent)
 - Terminal coding agent. Config at `~/.config/opencode/opencode.json` (Windows: `%USERPROFILE%\.config\opencode\opencode.json`).
 - Talks to Ollama through the `@ai-sdk/openai-compatible` provider package pointed at the local base URL.
-- `/models` inside the TUI lists the configured local models (pinned `*-opencode` variants only). `opencode run -m ollama/flint-opencode:latest "..."` or `opencode run -m ollama/qwen-opencode:latest "..."` runs one-shot from the shell.
+- `/models` inside the TUI lists the configured local models, plus endpoint-discovered base tags; pick only the pinned `*-opencode` "context-pinned 128K" rows. `opencode run -m ollama/flint-opencode:latest "..."` or `opencode run -m ollama/qwen-opencode:latest "..."` runs one-shot from the shell.
 
 ## The toggle (two providers, one config)
 

@@ -10,6 +10,22 @@
   each provider's declared pinned models, but on current OpenCode it does not
   filter endpoint-discovered base tags out of the picker; the config README,
   launch messages, and CI step now say so.
+- The kit no longer sets a default model on install. It merges only the
+  `ollama` and `headroom` provider blocks into an existing OpenCode config,
+  preserving the user's `model`, other providers, and MCP entries. The shipped
+  config has no top-level `model`; the installer and manual setup install
+  providers as picker options.
+- Added `install --set-default` (and `KIT_SET_DEFAULT=1` on the manual path)
+  for users who want the primary pinned model written as the default. A
+  proven kit-imposed old default is removed on upgrade, and state records the
+  choice so repair and uninstall can restore it.
+- Kit launch scripts now pin the model for their own session only. On OpenCode
+  2, `launch-direct` uses `OPENCODE_CONFIG_CONTENT` with `--standalone`;
+  Headroom wrap does not pin, so its guidance points at the Headroom
+  "context-pinned 128K" row. A bare `opencode` is unaffected.
+- Doctor's L3 check is structural rather than byte-for-byte: it verifies the
+  kit provider blocks and tolerates user keys, a user default, and other
+  providers. Uninstall removes only the kit's provider blocks.
 
 ## 1.0.0 - 2026-11-25
 

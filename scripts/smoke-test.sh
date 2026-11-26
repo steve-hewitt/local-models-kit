@@ -82,8 +82,9 @@ def modelfile_ctx(name):
     text = open(f"{root}/models/Modelfile.{name}").read()
     return int(re.search(r"PARAMETER num_ctx (\d+)", text).group(1))
 family_ctx = {"flint": modelfile_ctx("flint-opencode"), "qwen": modelfile_ctx("qwen-opencode")}
-default = cfg.get("model", "")
-assert "-opencode" in default, f"default model {default!r} is not a context-pinned *-opencode variant"
+default = cfg.get("model")
+if default and (str(default).startswith("ollama/") or str(default).startswith("headroom/")):
+    assert "-opencode" in str(default), f"kit default {default!r} is not a context-pinned *-opencode variant"
 for pname, provider in cfg.get("provider", {}).items():
     for key, model in provider.get("models", {}).items():
         assert "-opencode" in key, f"{pname}/{key} is declared but not context-pinned; an unpinned entry must not be offered for agent work"
@@ -94,7 +95,7 @@ for pname, provider in cfg.get("provider", {}).items():
         "surface unpinned base tags that the endpoint also serves")
 print("config ok")
 PYEOF
-  check "config default is a pinned *-opencode model, every declared limit matches its Modelfile pin, and each picker whitelist matches its declared models" $?
+  check "every declared model is a pinned *-opencode variant, every declared limit matches its Modelfile pin, and each picker whitelist matches its declared models" $?
 else
   warn "kit config or python3 not found; config checks skipped"
 fi

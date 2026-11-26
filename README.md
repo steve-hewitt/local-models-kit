@@ -27,10 +27,13 @@ python installer\manager\local_models_kit_manager.py install
 ```
 
 That installs the full stack: Flint and Qwen, their context-pinned variants,
-the OpenCode config, and ComfyUI. It ends with a doctor report. The same
-command has `--no-flint`, `--no-qwen`, and `--no-comfyui` opt-outs. The
-compiled `local-models-kit.exe` is the same program; see
-[installer/README.md](installer/README.md).
+the OpenCode provider blocks, and ComfyUI. It ends with a doctor report. The
+install does **not** set a startup default model: both models arrive as
+picker options, and an existing `model` field is left alone. Add
+`--set-default` to make the primary pinned model (Flint, or Qwen with
+`--no-flint`) the default. The same command has `--no-flint`, `--no-qwen`,
+and `--no-comfyui` opt-outs. The compiled `local-models-kit.exe` is the same
+program; see [installer/README.md](installer/README.md).
 
 The first run downloads both models (about 42 GB) plus the ComfyUI archive and
 model files (about 21 GB). Give it time; do not kill it at the first quiet
@@ -61,14 +64,17 @@ outside the agent. That is the end-to-end check.
 
 ## Choose a model
 
-Flint is the shipped default; Qwen is co-equal. Both are installed, both pin
-128K context, and both appear under the `ollama` and `headroom` providers. Pick
-either in `/models` inside OpenCode, or per run with
-`opencode run -m ollama/qwen-opencode:latest`.
+Flint and Qwen are co-equal, and neither is a startup default. Both are
+installed, both pin 128K context, and both appear under the `ollama` and
+`headroom` providers. Pick either in `/models` inside OpenCode, or per run
+with `opencode run -m ollama/qwen-opencode:latest`.
 
-To make Qwen the startup default, change the installed config's `model` field
-to `ollama/qwen-opencode:latest`, or install with `--no-flint` so Qwen is the
-only model. Model details and the comparison table are in
+To set a startup default yourself, add
+`"model": "ollama/flint-opencode:latest"` (or
+`"model": "ollama/qwen-opencode:latest"`) to the installed config, or install
+with `--set-default` (Qwen with `--no-flint`). Kit launch scripts pin the
+model for their own session only; a bare `opencode` is unaffected. Model
+details and the comparison table are in
 [docs/reference/ARCHITECTURE.md](docs/reference/ARCHITECTURE.md).
 
 ## Manual or split setup

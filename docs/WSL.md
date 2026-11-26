@@ -6,9 +6,10 @@ full memory pool; OpenCode runs in WSL and reaches Ollama at
 AMD has no ROCm device, so it would serve from the CPU and can shadow the
 Windows server on port 11434.
 
-**Model choice.** The walkthrough uses Flint, the shipped default. Qwen3-30B-A3B
-is co-equal: set `$env:MODEL_TAG = "qwen3:30b-a3b"` on the Windows side and use
-`qwen-opencode` in the verification commands. Add-on A covers Qwen.
+**Model choice.** The walkthrough uses Flint in its launch examples; neither
+model is a startup default. Qwen3-30B-A3B is co-equal: set
+`$env:MODEL_TAG = "qwen3:30b-a3b"` on the Windows side and use `qwen-opencode`
+in the verification commands. Add-on A covers Qwen.
 
 You need Windows 11 with `winget`, WSL2 with Ubuntu, about 25 GB free for Flint
 or about 45 GB for both models, and admin rights only to install WSL itself.
@@ -259,9 +260,10 @@ print nothing.
 ./scripts/launch-direct.sh examples/hello-agent
 ```
 
-On OpenCode 2 the script launches bare and uses the config default. The TUI
-footer must name the pinned model you chose (Flint or Qwen). If it does not,
-pick the right row in `/models`.
+On OpenCode 2 the script sets `OPENCODE_CONFIG_CONTENT` and launches a private
+server (`--standalone`) so this session is pinned to Flint; a bare `opencode`
+is unaffected. The TUI footer must name the pinned model you chose (Flint or
+Qwen). If it does not, pick the right row in `/models`.
 
 Send the prompt from `examples/hello-agent/TASK.md` verbatim:
 
@@ -314,9 +316,10 @@ Qwen is a Windows-side install; using it happens in WSL.
 Expect:
 
 - Switching models pauses: only one model is resident at a time.
-- Flint stays the default. To make Qwen the startup default, edit
+- Neither model is a startup default. To make Qwen the startup default, edit
   `~/.config/opencode/opencode.json` and set `"model"` to
-  `"ollama/qwen-opencode:latest"`.
+  `"ollama/qwen-opencode:latest"`, or install with
+  `--set-default --no-flint`.
 - Qwen thinks before answering; its reasoning counts against the 8192 output
   budget (Flint's is 32768).
 - Optional proof: `MODEL_TAG=qwen3:30b-a3b ./scripts/smoke-test.sh`.

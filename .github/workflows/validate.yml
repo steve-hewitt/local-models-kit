@@ -28,17 +28,16 @@ jobs:
           grep -q "http://127.0.0.1:8787/v1" config/opencode.json
           grep -q "qwen-opencode:latest" config/opencode.json
 
-      - name: Config declares only context-pinned models (regression guard for the 2026-10-24 first-run failure)
+      - name: Config ships no default and declares only context-pinned models (regression guard for the 2026-10-24 first-run failure)
         run: |
           python3 - << 'EOF'
           import json, pathlib
           cfg = json.loads(pathlib.Path("config/opencode.json").read_text())
-          default = cfg["model"]
-          assert "-opencode" in default, f"default model {default} is not a context-pinned *-opencode variant; the unpinned base tag runs at Ollama's 4096 default and truncates prompts"
+          assert "model" not in cfg, "the shipped config must not set a top-level model; providers are installed as options, and --set-default is the opt-in"
           for pname, provider in cfg["provider"].items():
               for key in provider["models"]:
                   assert "-opencode" in key, f"{pname}/{key} is declared but not context-pinned; do not advertise agent models whose num_ctx is not pinned by a Modelfile"
-          print("All declared models are context-pinned variants, default included.")
+          print("Shipped config sets no default; all declared models are context-pinned variants.")
           EOF
 
       - name: Picker whitelist matches declared pinned models
