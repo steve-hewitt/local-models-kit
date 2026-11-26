@@ -423,8 +423,8 @@ class TestOpenCodeL2(ManagerCase):
 
     def test_version_output_is_normalized(self):
         # OpenCode 2 answers --version as 'opencode v2.0.26'. The
-        # kit records and reports the bare version; the first live
-        # Biff run printed 'opencode opencode v2.0.26' before this
+        # kit records and reports the bare version; a live run
+        # printed 'opencode opencode v2.0.26' before this
         # normalization existed.
         self.platform.seed_opencode(DISTRO, "opencode v2.0.26",
                                     on_path=True)

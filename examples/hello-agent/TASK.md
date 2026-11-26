@@ -13,7 +13,7 @@ Goal: prove the whole stack (OpenCode agent, tool calls, file edit, model) on a 
 
 3. Expected agent behavior: read both files, edit `mul` in `calc.py` to use `*` instead of `+`, run the tests, report green.
 
-Timing note: the first turn is the slowest thing in this kit. It pays the model load, and Flint thinks before it answers (hundreds of reasoning tokens even on small prompts). On a GPU-resident native Windows run expect a pause; CPU-only (for example Ollama inside WSL2 on AMD, where ROCm is not exposed) the first hands-on run took 56 seconds to 1m40s per turn. Slow is expected there; silent truncation is not. If the agent seems to lose the task instead, check `ollama ps`: CONTEXT should read 32768, and you should be on a `*-opencode` model, not a base tag at 4096.
+Timing note: the first turn is the slowest thing in this kit. It pays the model load, and Flint thinks before it answers (hundreds of reasoning tokens even on small prompts). On a GPU-resident native Windows run expect a pause; CPU-only (for example Ollama inside WSL2 on AMD, where ROCm is not exposed) the first hands-on run took 56 seconds to 1m40s per turn. Slow is expected there; silent truncation is not. If the agent seems to lose the task instead, check `ollama ps`: CONTEXT should read 131072, and you should be on a `*-opencode` model, not a base tag at 4096.
 4. Verify yourself afterwards, without the agent:
 
    ```

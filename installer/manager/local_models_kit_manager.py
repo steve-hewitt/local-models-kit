@@ -177,8 +177,8 @@ def _clean_opencode_version(text: str):
     """Normalize an `opencode --version` answer to the bare version.
     OpenCode 2 prints 'opencode v2.0.26'; the kit's other version
     strings are bare numbers, and the uncleaned value doubled the
-    name in every message that names the tool (the first live Biff
-    run printed 'opencode opencode v2.0.26')."""
+    name in every message that names the tool (the first live run
+    printed 'opencode opencode v2.0.26')."""
     text = text.strip()
     if text.lower().startswith("opencode "):
         text = text.split(None, 1)[1].strip()

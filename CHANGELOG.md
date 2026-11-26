@@ -18,6 +18,6 @@ First public release of local-models-kit.
 - ComfyUI with Z-Image-Turbo on the same GPU, including a `switch` verb that
   hands the GPU between the image stack and the agent stack.
 - A validation ledger, WSL walkthrough, hardware sizing guide, troubleshooting
-  notes, a project AGENTS template, and a hello-agent end-to-end proof task.
+  notes, and a hello-agent end-to-end proof task.
 - CI that validates config shape, script syntax, template drift, the installer
   behavior suite, and the hello-agent task without running a model.
