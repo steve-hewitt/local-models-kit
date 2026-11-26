@@ -44,8 +44,8 @@ if ($major -eq "1") {
     Write-Host "OpenCode 2: v2 has no top-level model flag; the session model is the config default"
     Write-Host "installed by setup, which is $Model. Check the TUI footer: it must name the pinned Flint"
     Write-Host "model. If it names anything else, switch with /models by selecting the row labeled"
-    Write-Host "'Flint 40B, context-pinned 128K'. The current config whitelist should hide raw base tags;"
-    Write-Host "if a raw flint:latest row appears, the installed config predates that fix."
+    Write-Host "'Flint 40B, context-pinned 128K'. A raw flint:latest row may appear in the picker"
+    Write-Host "despite the whitelist; do not pick it, it is the unpinned base tag."
     opencode
 } else {
     Write-Host "WARNING: could not parse an OpenCode version from 'opencode --version' (got '$verRaw')." -ForegroundColor Yellow

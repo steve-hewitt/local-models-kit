@@ -41,7 +41,7 @@ jobs:
           print("All declared models are context-pinned variants, default included.")
           EOF
 
-      - name: Picker whitelist hides server-discovered base tags
+      - name: Picker whitelist matches declared pinned models
         run: |
           python3 - << 'EOF'
           import json, pathlib
@@ -51,8 +51,8 @@ jobs:
               whitelist = set(provider.get("whitelist", []))
               assert whitelist == declared, (
                   f"{pname} whitelist {sorted(whitelist)} must exactly match its declared models "
-                  f"{sorted(declared)}; OpenCode can surface extra models served by the endpoint, "
-                  "including unpinned base tags, unless the picker is whitelisted")
+                  f"{sorted(declared)}; the whitelist records intent but does not filter "
+                  "endpoint-discovered base tags out of the picker")
           print("Every provider whitelist exactly matches its declared pinned models.")
           EOF
 

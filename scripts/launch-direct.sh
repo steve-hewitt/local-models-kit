@@ -47,8 +47,8 @@ case "$VER" in
     echo "OpenCode $VER: v2 has no top-level model flag; the session model is the config default"
     echo "installed by setup, which is $MODEL. Check the TUI footer: it must name the pinned Flint"
     echo "model. If it names anything else, switch with /models by selecting the row labeled"
-    echo "'Flint 40B, context-pinned 128K'. The current config whitelist should hide raw base tags;"
-    echo "if a raw flint:latest row appears, the installed config predates that fix."
+    echo "'Flint 40B, context-pinned 128K'. A raw flint:latest row may appear in the picker"
+    echo "despite the whitelist; do not pick it, it is the unpinned base tag."
     exec opencode
     ;;
   *)

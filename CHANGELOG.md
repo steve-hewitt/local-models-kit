@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+- Removed `--code-memory none` from the Headroom launch scripts. Headroom
+  0.41.0 does not accept that flag for `opencode`; `headroom wrap` forwarded
+  it to OpenCode, which exited with "Unrecognized flag: --code-memory".
+  Current Headroom registers no Serena server for `opencode` by default.
+- Corrected the picker-whitelist documentation. The whitelist still matches
+  each provider's declared pinned models, but on current OpenCode it does not
+  filter endpoint-discovered base tags out of the picker; the config README,
+  launch messages, and CI step now say so.
+
 ## 1.0.0 - 2026-11-25
 
 First public release of local-models-kit.

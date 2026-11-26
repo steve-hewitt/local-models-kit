@@ -18,10 +18,11 @@ default, change that field to `ollama/qwen-opencode:latest`. Both are declared
 with identical limits and whitelists.
 
 Only the pinned variants are declared: `flint-opencode:latest` and
-`qwen-opencode:latest`. Each provider's `whitelist` exactly matches its
-declared models, so raw base tags served by Ollama stay out of the picker. A
-base tag (`flint:latest`, `qwen3:30b-a3b`) has no `num_ctx` pin and must not be
-used as an agent model.
+`qwen-opencode:latest`. Each provider's `whitelist` matches its declared
+models, but current OpenCode still surfaces endpoint-discovered base tags in
+the picker, so pick only the "context-pinned 128K" rows. A base tag
+(`flint:latest`, `qwen3:30b-a3b`) has no `num_ctx` pin and must not be used as
+an agent model.
 
 ## Rules that matter
 
